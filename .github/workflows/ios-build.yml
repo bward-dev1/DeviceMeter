@@ -44,6 +44,12 @@ jobs:
           cd ..
           rm -rf Payload
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeviceMeter
+          path: DeviceMeter.ipa
+
       - name: Upload to releases
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
