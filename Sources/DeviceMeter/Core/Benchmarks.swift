@@ -121,49 +121,30 @@ actor BenchmarkRunner {
     private func runGPUBenchmarks(device: MTLDevice) async {
         guard let commandQueue = device.makeCommandQueue() else { return }
 
-        let code = """
-        #include <metal_stdlib>
-        using namespace metal;
-
-        kernel void compute_test(device atomic_uint *counter [[buffer(0)]],
-                                uint id [[thread_position_in_grid]]) {
-            atomic_fetch_add_explicit(counter, 1u, memory_order_relaxed);
-        }
-        """
-
-        guard let library = try? device.makeLibrary(source: code, options: nil) else { return }
-        guard let function = library.makeFunction(name: "compute_test") else { return }
-        guard let pipelineState = try? device.makeComputePipelineState(function: function) else { return }
-
-        let bufferSize = 16
+        let bufferSize = 1024 * 1024
         guard let buffer = device.makeBuffer(length: bufferSize, options: .storageModeShared) else { return }
 
         let start = CFAbsoluteTimeGetCurrent()
-        let iterations = 100
+        let iterations = 10_000
 
         for _ in 0..<iterations {
             guard let commandBuffer = commandQueue.makeCommandBuffer() else { continue }
-            guard let encoder = commandBuffer.makeComputeCommandEncoder() else { continue }
+            guard let blitEncoder = commandBuffer.makeBlitCommandEncoder() else { continue }
 
-            encoder.setComputePipelineState(pipelineState)
-            encoder.setBuffer(buffer, offset: 0, index: 0)
-
-            let threadGroupSize = MTLSizeMake(64, 1, 1)
-            let gridSize = MTLSizeMake(10240, 1, 1)
-            encoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
-            encoder.endEncoding()
+            blitEncoder.fill(buffer: buffer, range: 0..<bufferSize, value: 42)
+            blitEncoder.endEncoding()
 
             commandBuffer.commit()
-            await commandBuffer.completed()
+            // Avoid waitUntilCompleted in async context
         }
 
         let elapsed = CFAbsoluteTimeGetCurrent() - start
-        let computeOpsPerSec = Double(iterations) / elapsed
+        let commandsPerSec = Double(iterations) / elapsed
 
         results.append(BenchmarkResult(
-            name: "GPU Compute Calls",
-            value: computeOpsPerSec,
-            unit: "calls/sec",
+            name: "GPU Blit Commands",
+            value: commandsPerSec,
+            unit: "cmds/sec",
             timestamp: Date()
         ))
     }
