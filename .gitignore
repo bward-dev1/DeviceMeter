@@ -1,0 +1,36 @@
+# Xcode
+*.pbxproj
+!project.yml
+*.xcodeproj/
+xcuserdata/
+*.xcworkspace/
+DerivedData/
+build/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+*.swiftformat
+.swiftlint.yml
+
+# OS
+*~
+*.swp
+*.swo
+
+# CI
+.github/workflows/*.output
+*.ipa
+Payload/

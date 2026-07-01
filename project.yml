@@ -1,0 +1,84 @@
+name: DeviceMeter
+options:
+  bundleIdPrefix: com.devicemeter
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    CLANG_ENABLE_OBJC_ARC: "YES"
+  configs:
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      SWIFT_COMPILATION_MODE: wholemodule
+      GCC_OPTIMIZATION_LEVEL: "s"
+      VALIDATE_PRODUCT: "YES"
+
+targets:
+  DeviceMeter:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Sources/DeviceMeter
+        excludes:
+          - "**/.DS_Store"
+          - "**/Info*.plist"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.devicemeter.app
+        PRODUCT_NAME: DeviceMeter
+        INFOPLIST_FILE: Sources/DeviceMeter/App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: "NO"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+    info:
+      path: Sources/DeviceMeter/App/Info.plist
+      properties:
+        CFBundleDisplayName: DeviceMeter
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: true
+
+  DeviceMeterTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - Tests/DeviceMeterTests
+    dependencies:
+      - target: DeviceMeter
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.devicemeter.app.tests
+
+schemes:
+  DeviceMeter:
+    build:
+      targets:
+        DeviceMeter: all
+        DeviceMeterTests: [test]
+    test:
+      targets:
+        - DeviceMeterTests
+      gatherCoverageData: true
+    run:
+      config: Debug
+    archive:
+      config: Release

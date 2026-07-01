@@ -1,0 +1,170 @@
+import Foundation
+import Metal
+import MetalKit
+
+struct BenchmarkResult: Codable {
+    let name: String
+    let value: Double
+    let unit: String
+    let timestamp: Date
+
+    var displayValue: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 2
+        let number = formatter.string(from: NSNumber(value: value)) ?? "0"
+        return "\(number) \(unit)"
+    }
+}
+
+actor BenchmarkRunner {
+    private let profile: DeviceProfile
+    private(set) var results: [BenchmarkResult] = []
+    private(set) var isRunning = false
+
+    init(profile: DeviceProfile) {
+        self.profile = profile
+    }
+
+    func runAllBenchmarks() async {
+        guard !isRunning else { return }
+        isRunning = true
+        defer { isRunning = false }
+
+        results = []
+
+        await runCPUBenchmarks()
+        await runMemoryBenchmarks()
+        if let device = MTLCreateSystemDefaultDevice() {
+            await runGPUBenchmarks(device: device)
+        }
+    }
+
+    private func runCPUBenchmarks() async {
+        let iterations = profile.benchmarkIterations
+
+        let start = CFAbsoluteTimeGetCurrent()
+        var sum: UInt64 = 0
+        for i in 0..<iterations {
+            sum = sum &+ UInt64(bitPattern: Int64(i))
+        }
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        let opsPerSec = Double(iterations) / elapsed
+        results.append(BenchmarkResult(
+            name: "CPU Integer Ops",
+            value: opsPerSec / 1_000_000_000,
+            unit: "G ops/sec",
+            timestamp: Date()
+        ))
+
+        let fpStart = CFAbsoluteTimeGetCurrent()
+        var fpSum: Double = 0
+        for i in 0..<iterations {
+            fpSum += Double(i) * Double(i)
+        }
+        let fpElapsed = CFAbsoluteTimeGetCurrent() - fpStart
+        let fpOpsPerSec = Double(iterations) / fpElapsed
+        results.append(BenchmarkResult(
+            name: "CPU Float Ops",
+            value: fpOpsPerSec / 1_000_000_000,
+            unit: "G ops/sec",
+            timestamp: Date()
+        ))
+
+        let simdStart = CFAbsoluteTimeGetCurrent()
+        var simdSum: SIMD4<Float> = .zero
+        for i in 0..<(iterations / 4) {
+            let val = SIMD4<Float>(Float(i), Float(i), Float(i), Float(i))
+            simdSum = simdSum + val
+        }
+        let simdElapsed = CFAbsoluteTimeGetCurrent() - simdStart
+        let simdOpsPerSec = Double(iterations) / simdElapsed
+        results.append(BenchmarkResult(
+            name: "CPU SIMD Ops",
+            value: simdOpsPerSec / 1_000_000_000,
+            unit: "G ops/sec",
+            timestamp: Date()
+        ))
+    }
+
+    private func runMemoryBenchmarks() async {
+        let sizes = [1 << 20, 1 << 24, 1 << 26] // 1MB, 16MB, 64MB
+
+        for size in sizes {
+            let buffer = UnsafeMutableBufferPointer<UInt64>.allocate(capacity: size / 8)
+            defer { buffer.deallocate() }
+
+            let iterations = 1_000
+            let start = CFAbsoluteTimeGetCurrent()
+
+            for _ in 0..<iterations {
+                for i in buffer.indices {
+                    let current = buffer[i]
+                    buffer[i] = current &+ 1
+                }
+            }
+
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
+            let bytesProcessed = UInt64(buffer.count) * 8 * UInt64(iterations)
+            let gbPerSec = Double(bytesProcessed) / elapsed / 1_000_000_000
+            let mbSuffix = size / (1 << 20)
+
+            results.append(BenchmarkResult(
+                name: "Memory BW (\(mbSuffix)MB)",
+                value: gbPerSec,
+                unit: "GB/sec",
+                timestamp: Date()
+            ))
+        }
+    }
+
+    private func runGPUBenchmarks(device: MTLDevice) async {
+        guard let commandQueue = device.makeCommandQueue() else { return }
+
+        let code = """
+        #include <metal_stdlib>
+        using namespace metal;
+
+        kernel void compute_test(device atomic_uint *counter [[buffer(0)]],
+                                uint id [[thread_position_in_grid]]) {
+            atomic_fetch_add_explicit(counter, 1u, memory_order_relaxed);
+        }
+        """
+
+        guard let library = try? device.makeLibrary(source: code, options: nil) else { return }
+        guard let function = library.makeFunction(name: "compute_test") else { return }
+        guard let pipelineState = try? device.makeComputePipelineState(function: function) else { return }
+
+        let bufferSize = 16
+        guard let buffer = device.makeBuffer(length: bufferSize, options: .storageModeShared) else { return }
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let iterations = 100
+
+        for _ in 0..<iterations {
+            guard let commandBuffer = commandQueue.makeCommandBuffer() else { continue }
+            guard let encoder = commandBuffer.makeComputeCommandEncoder() else { continue }
+
+            encoder.setComputePipelineState(pipelineState)
+            encoder.setBuffer(buffer, offset: 0, index: 0)
+
+            let threadGroupSize = MTLSizeMake(64, 1, 1)
+            let gridSize = MTLSizeMake(10240, 1, 1)
+            encoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
+            encoder.endEncoding()
+
+            commandBuffer.commit()
+            await commandBuffer.completed()
+        }
+
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        let computeOpsPerSec = Double(iterations) / elapsed
+
+        results.append(BenchmarkResult(
+            name: "GPU Compute Calls",
+            value: computeOpsPerSec,
+            unit: "calls/sec",
+            timestamp: Date()
+        ))
+    }
+}
