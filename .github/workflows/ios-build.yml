@@ -23,26 +23,24 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
-      - name: Build for Release
+      - name: Build and Package IPA
         run: |
-          xcodebuild build \
-            -scheme DeviceMeter \
+          xcodebuild -scheme DeviceMeter \
             -configuration Release \
-            -sdk iphoneos \
             -derivedDataPath build \
+            -archivePath build/DeviceMeter.xcarchive \
             -arch arm64 \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY= \
-            PROVISIONING_PROFILE=
+            PROVISIONING_PROFILE= \
+            archive
 
-      - name: Package IPA
-        run: |
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/DeviceMeter.app Payload/
+          cp -r build/DeviceMeter.xcarchive/Products/Applications/DeviceMeter.app Payload/
           cd Payload
           zip -r ../DeviceMeter.ipa .
           cd ..
-          rm -rf Payload
+          rm -rf Payload build/DeviceMeter.xcarchive
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
