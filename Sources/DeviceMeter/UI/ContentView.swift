@@ -16,6 +16,7 @@ struct ContentView: View {
                 .tag(0)
 
             BenchmarkView(
+                profile: profile,
                 results: results,
                 isRunning: isRunning,
                 onStartBenchmark: startBenchmarks
@@ -135,9 +136,50 @@ struct LabeledValue: View {
 }
 
 struct BenchmarkView: View {
+    let profile: DeviceProfile?
     let results: [BenchmarkResult]
     let isRunning: Bool
     let onStartBenchmark: () -> Void
+
+    private var markdownContent: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .short
+        let timestamp = dateFormatter.string(from: Date())
+
+        var md = "# DeviceMeter Benchmark Results\n\n"
+        md += "**Generated:** \(timestamp)\n\n"
+
+        if let profile = profile {
+            md += "## Device Information\n\n"
+            md += "| Property | Value |\n"
+            md += "|----------|-------|\n"
+            md += "| Performance Tier | \(profile.tier.name) |\n"
+            md += "| GPU | \(profile.gpuName) |\n"
+            md += "| GPU Family | \(profile.gpuFamily) |\n"
+            md += "| RAM | \(formatBytes(profile.physicalMemoryBytes)) |\n"
+            md += "| CPU Cores | \(profile.processorCount) |\n"
+            md += "\n"
+        }
+
+        md += "## Benchmark Results\n\n"
+        md += "| Test | Value |\n"
+        md += "|------|-------|\n"
+
+        for result in results {
+            md += "| \(result.name) | \(result.displayValue) |\n"
+        }
+
+        md += "\n---\n\n"
+        md += "Exported from DeviceMeter v1.0\n"
+
+        return md
+    }
+
+    private func formatBytes(_ bytes: UInt64) -> String {
+        let gb = Double(bytes) / Double(1 << 30)
+        return String(format: "%.1f GB", gb)
+    }
 
     var body: some View {
         NavigationStack {
@@ -178,18 +220,39 @@ struct BenchmarkView: View {
                     }
                 }
 
-                Button(action: onStartBenchmark) {
-                    HStack {
-                        Image(systemName: "bolt.fill")
-                        Text(isRunning ? "Running..." : "Run Benchmarks")
+                VStack(spacing: 12) {
+                    Button(action: onStartBenchmark) {
+                        HStack {
+                            Image(systemName: "bolt.fill")
+                            Text(isRunning ? "Running..." : "Run Benchmarks")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+                    .disabled(isRunning)
+
+                    if !results.isEmpty {
+                        ShareLink(
+                            item: markdownContent,
+                            subject: Text("DeviceMeter Results"),
+                            message: Text("Benchmark results from DeviceMeter"),
+                            preview: SharePreview("Results.md", image: Image(systemName: "doc.text"))
+                        ) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.up")
+                                Text("Export to MD")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                    }
                 }
-                .disabled(isRunning)
                 .padding()
             }
             .navigationTitle("Benchmarks")
